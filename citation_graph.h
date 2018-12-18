@@ -7,6 +7,9 @@
 
 template<class Publication>
 class Node {
+private:
+    using PublId = typename Publication::id_type;
+    using GNode = Node<Publication>;
 public:
     explicit Node(const typename Publication::id_type &id) : publication(id) {}
 
@@ -14,9 +17,11 @@ public:
         thisNode = ptr;
     }
 
+    Publication &getPublication() noexcept {
+        return publication;
+    }
+
 private:
-    using PublId = typename Publication::id_type;
-    using GNode = Node<Publication>;
     Publication publication;
     std::weak_ptr<Node<Publication>> thisNode;
     std::vector<std::weak_ptr<GNode>> parents;
@@ -26,8 +31,12 @@ private:
 
 template<class Publication>
 class CitationGraph {
+private:
+    using PublId = typename Publication::id_type;
+    using GNode = Node<Publication>;
+    using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
 public:
-    explicit CitationGraph(typename Publication::id_type const &stem_id)
+    explicit CitationGraph(PublId const &stem_id)
             : nodes(nullptr), rootId(nullptr), root(nullptr) {
         nodes.swap(std::make_unique<NodesMap>());
         rootId.swap(std::make_unique<PublId>(stem_id));
@@ -55,10 +64,15 @@ public:
         return *this;
     }
 
+    PublId get_root_id() const noexcept(noexcept(Publication::get_id())) {
+        return root->getPublication().get_id();
+    }
+
+    bool exists(PublId const &id) const {
+        return nodes->find(id) != nodes->end();
+    }
+
 private:
-    using PublId = typename Publication::id_type;
-    using GNode = Node<Publication>;
-    using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
     std::unique_ptr<NodesMap> nodes;
     std::unique_ptr<PublId> rootId;
     std::shared_ptr<GNode> root;
