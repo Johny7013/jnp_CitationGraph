@@ -5,6 +5,30 @@
 #include <memory>
 #include <map>
 
+class PublicationAlreadyCreated: public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "Publication already created.";
+    }
+} pAlreadyCreated;
+
+class PublicationNotFound: public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "Publication not found.";
+    }
+} pNotFound;
+
+class TriedToRemoveRoot: public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "Tried to remove root";
+    }
+}triedToRemoveRoot;
+
 template<class Publication>
 class Node {
 private:
@@ -37,10 +61,12 @@ private:
     using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
 public:
     explicit CitationGraph(PublId const &stem_id)
-            : nodes(nullptr), rootId(nullptr), root(nullptr) {
-        nodes.swap(std::make_unique<NodesMap>());
-        rootId.swap(std::make_unique<PublId>(stem_id));
-        root.swap(std::make_shared<GNode>(stem_id));
+            : nodes(std::make_unique<NodesMap>()),
+            rootId(std::make_unique<PublId>(stem_id)),
+            root(std::make_shared<GNode>(stem_id)) {
+        //nodes.swap(std::make_unique<NodesMap>());
+        //rootId.swap(std::make_unique<PublId>(stem_id));
+        //root.swap(std::make_shared<GNode>(stem_id));
         root->setThisNodePointer(root);
         (*nodes)[stem_id] = root;
     }
