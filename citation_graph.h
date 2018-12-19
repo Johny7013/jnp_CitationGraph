@@ -31,9 +31,14 @@ class TriedToRemoveRoot: public std::exception
 
 template<class Publication>
 class Node {
-private:
     using PublId = typename Publication::id_type;
     using GNode = Node<Publication>;
+    Publication publication;
+    std::weak_ptr<Node<Publication>> thisNode;
+    std::vector<std::weak_ptr<GNode>> parents;
+    std::vector<size_t> positionInParent;
+    std::vector<std::shared_ptr<GNode>> children;
+
 public:
     explicit Node(const typename Publication::id_type &id) : publication(id) {}
 
@@ -45,20 +50,28 @@ public:
         return publication;
     }
 
-private:
-    Publication publication;
-    std::weak_ptr<Node<Publication>> thisNode;
-    std::vector<std::weak_ptr<GNode>> parents;
-    std::vector<size_t> positionInParent;
-    std::vector<std::shared_ptr<GNode>> children;
+    auto &getParents(){
+        return parents;
+    }
+
+    auto &getChildren(){
+        return children;
+    }
 };
 
 template<class Publication>
 class CitationGraph {
-private:
     using PublId = typename Publication::id_type;
     using GNode = Node<Publication>;
     using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
+    std::unique_ptr<NodesMap> nodes;
+    std::unique_ptr<PublId> rootId;
+    std::shared_ptr<GNode> root;
+
+    std::weak_ptr<GNode> &getPointerToNode(typename Publication::id_type const &id) const{
+        return nodes->find(id)->second;
+    }
+
 public:
     explicit CitationGraph(PublId const &stem_id)
             : nodes(std::make_unique<NodesMap>()),
@@ -90,7 +103,7 @@ public:
         return *this;
     }
 
-    PublId get_root_id() const noexcept(noexcept(Publication::get_id())) {
+    PublId get_root_id() const noexcept(noexcept(root->getPublication().get_id())) {
         return root->getPublication().get_id();
     }
 
@@ -98,10 +111,40 @@ public:
         return nodes->find(id) != nodes->end();
     }
 
-private:
-    std::unique_ptr<NodesMap> nodes;
-    std::unique_ptr<PublId> rootId;
-    std::shared_ptr<GNode> root;
+    std::vector<typename Publication::id_type> get_children(typename Publication::id_type const &id) const {
+        if (!exists(id)) {
+            throw pNotFound;
+        }
+        else {
+            std::vector<typename Publication::id_type> children;
+
+            auto pointersToChildren = getPointerToNode(id).lock()->getChildrean();
+
+            for (auto parentNode: pointersToChildren) {
+                children.emplace_back(parentNode.lock()->getPublication().get_id());
+            }
+
+            return children;
+        }
+    }
+
+    std::vector<typename Publication::id_type> get_parents(typename Publication::id_type const &id) const {
+        if (!exists(id)) {
+            throw pNotFound;
+        }
+        else {
+            std::vector<typename Publication::id_type> parents;
+
+            auto pointersToParents = getPointerToNode(id).lock()->getParents();
+
+            for (auto parentNode: pointersToParents) {
+                parents.emplace_back(parentNode.lock()->getPublication().get_id());
+            }
+
+            return parents;
+        }
+    }
+
 };
 
 #endif //CITATION_GRAPH_CITATION_GRAPH_H
