@@ -68,7 +68,7 @@ class CitationGraph {
     std::unique_ptr<PublId> rootId;
     std::shared_ptr<GNode> root;
 
-    std::weak_ptr<GNode> &getPointerToNode(typename Publication::id_type const &id) const{
+    std::weak_ptr<GNode> &getPointerToNode(PublId const &id) const {
         return nodes->find(id)->second;
     }
 
@@ -111,12 +111,12 @@ public:
         return nodes->find(id) != nodes->end();
     }
 
-    std::vector<typename Publication::id_type> get_children(typename Publication::id_type const &id) const {
+    std::vector<PublId> get_children(PublId const &id) const {
         if (!exists(id)) {
             throw pNotFound;
         }
         else {
-            std::vector<typename Publication::id_type> children;
+            std::vector<PublId > children;
 
             auto pointersToChildren = getPointerToNode(id).lock()->getChildrean();
 
@@ -128,12 +128,12 @@ public:
         }
     }
 
-    std::vector<typename Publication::id_type> get_parents(typename Publication::id_type const &id) const {
+    std::vector<PublId> get_parents(PublId const &id) const {
         if (!exists(id)) {
             throw pNotFound;
         }
         else {
-            std::vector<typename Publication::id_type> parents;
+            std::vector<PublId> parents;
 
             auto pointersToParents = getPointerToNode(id).lock()->getParents();
 
