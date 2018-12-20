@@ -195,7 +195,7 @@ public:
         std::swap(positionInChild[position], positionInChild[positionInChild.size() - 1]);
         positionInChild.pop_back();
 
-        if (children.size() > 0) {
+        if (children.size() > position) {
             auto child = children[position];
             child->positionInParent[positionInChild[position]] = position;
         }
@@ -207,7 +207,7 @@ public:
         std::swap(positionInParent[position], positionInParent[positionInParent.size() - 1]);
         positionInParent.pop_back();
 
-        if (parents.size() > 0) {
+        if (parents.size() > position) {
             auto parent = parents[position].lock();
             parent->positionInChild[positionInParent[position]] = position;
         }
