@@ -8,13 +8,13 @@
 
 class PublicationAlreadyCreated : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication already created.";
+        return "Publication already created";
     }
 };
 
 class PublicationNotFound : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication not found.";
+        return "Publication not found";
     }
 };
 
@@ -195,8 +195,10 @@ public:
         std::swap(positionInChild[position], positionInChild[positionInChild.size() - 1]);
         positionInChild.pop_back();
 
-        auto child = children[position];
-        child->positionInParent[positionInChild[position]] = position;
+        if (children.size() > 0) {
+            auto child = children[position];
+            child->positionInParent[positionInChild[position]] = position;
+        }
     }
 
     void removeParent(size_t position) {
@@ -205,8 +207,10 @@ public:
         std::swap(positionInParent[position], positionInParent[positionInParent.size() - 1]);
         positionInParent.pop_back();
 
-        auto parent = parents[position].lock();
-        parent->positionInChild[positionInParent[position]] = position;
+        if (parents.size() > 0) {
+            auto parent = parents[position].lock();
+            parent->positionInChild[positionInParent[position]] = position;
+        }
     }
 
     void remove() {
