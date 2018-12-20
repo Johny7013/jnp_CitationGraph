@@ -28,12 +28,15 @@ template<class Publication>
 class Node {
     using PublId = typename Publication::id_type;
     using GNode = Node<Publication>;
+    using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
     Publication publication;
     std::weak_ptr<Node<Publication>> thisNode;
     std::vector<std::weak_ptr<GNode>> parents;
     std::vector<size_t> positionInParent;
     std::vector<std::shared_ptr<GNode>> children;
     std::vector<size_t> positionInChild;
+    NodesMap *map;
+    typename NodesMap::iterator mapIt;
 
 public:
     explicit Node(const PublId &id) : publication(id) {}
@@ -47,13 +50,20 @@ public:
     }
 
     ~Node() {
-        for (int i = 0; i < children.size(); i++) {
+        for (size_t i = 0; i < children.size(); i++) {
             children[i]->removeParent(positionInChild[i]);
         }
+
+        map->erase(mapIt);
     }
 
     void setThisNodePointer(const std::shared_ptr<GNode> &ptr) {
         thisNode = ptr;
+    }
+
+    void setMapAndIt(NodesMap *newMap, typename NodesMap::iterator newIt) {
+        map = newMap;
+        mapIt = newIt;
     }
 
     Publication &getPublication() noexcept {
@@ -107,7 +117,7 @@ public:
             throw;
         }
 
-        int i = 1;
+        size_t i = 1;
         try {
             for (; i < parents.size(); i++) {
                 size_t position = parents[i]->howManyChildren();
@@ -115,7 +125,7 @@ public:
                 parents[i]->addExistingChild(child, i);
             }
         } catch (...) {
-            for (int j = 0; j < i; j++) {
+            for (size_t j = 0; j < i; j++) {
                 parents[j]->removeChildImmediately();
             }
             throw;
@@ -214,7 +224,7 @@ public:
     }
 
     void remove() {
-        for (int i = 0; i < parents.size(); i++) {
+        for (size_t i = 0; i < parents.size(); i++) {
             if (!parents[i].expired()) {
                 auto parentPtr = parents[i].lock();
                 parentPtr->removeChild(positionInParent[i]);
@@ -252,7 +262,8 @@ public:
             : nodes(std::make_unique<NodesMap>()),
               root(std::make_shared<GNode>(stem_id)) {
         root->setThisNodePointer(root);
-        (*nodes)[stem_id] = root;
+        auto newIt = nodes->insert(std::make_pair(stem_id, std::weak_ptr<GNode>(root))).first;
+        root->setMapAndIt(nodes.get(), newIt);
     }
 
     CitationGraph(CitationGraph<Publication> &) = delete;
@@ -295,9 +306,11 @@ public:
 
         auto parentPtr = getPointerToNode(parent_id).lock();
         auto newPtr = parentPtr->addNewChild(id);
+        auto newSharedPtr = newPtr.lock();
 
         try {
-            nodes->insert(std::make_pair(id, newPtr));
+            auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
+            newSharedPtr->setMapAndIt(nodes.get(), newIt);
         } catch (...) {
             parentPtr->removeChildImmediately();
             throw;
@@ -311,7 +324,7 @@ public:
 
         std::unordered_set<std::shared_ptr<GNode>> parentsSet;
         std::vector<std::shared_ptr<GNode>> parents;
-        for (int i = 0; i < parent_ids.size(); i++) {
+        for (size_t i = 0; i < parent_ids.size(); i++) {
             if (!idIsOccupied(parent_ids[i])) throw PublicationNotFound();
             auto parentPtr = getPointerToNode(parent_ids[i]).lock();
             if (parentsSet.find(parentPtr) == parentsSet.end()) {
@@ -321,11 +334,13 @@ public:
         }
 
         auto newPtr = parents[0]->addNewChild(id, parents);
+        auto newSharedPtr = newPtr.lock();
 
         try {
-            nodes->insert(std::make_pair(id, newPtr));
+            auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
+            newSharedPtr->setMapAndIt(nodes.get(), newIt);
         } catch (...) {
-            for (int i = 0; i < parents.size(); i++) {
+            for (size_t i = 0; i < parents.size(); i++) {
                 parents[i]->removeChildImmediately();
             }
             throw;
@@ -397,7 +412,6 @@ public:
         auto nodeIt = nodes->find(id);
         std::shared_ptr<GNode> nodePtr = nodeIt->second.lock();
 
-        nodes->erase(nodeIt);
         nodePtr->remove();
     }
 
