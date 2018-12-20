@@ -33,6 +33,7 @@ class Node {
     std::vector<std::weak_ptr<GNode>> parents;
     std::vector<size_t> positionInParent;
     std::vector<std::shared_ptr<GNode>> children;
+    std::vector<size_t> positionInChild;
 
 public:
     explicit Node(const PublId &id) : publication(id) {}
@@ -43,6 +44,12 @@ public:
               positionInParent() {
         parents.push_back(parent);
         positionInParent.push_back(index);
+    }
+
+    ~Node() {
+        for (int i = 0; i < children.size(); i++) {
+            children[i]->removeParent(positionInChild[i]);
+        }
     }
 
     void setThisNodePointer(const std::shared_ptr<GNode> &ptr) {
@@ -57,18 +64,35 @@ public:
         return children.size();
     }
 
-    void removeChildImmediately() {
-        children.pop_back();
+    size_t howManyParents() noexcept {
+        return parents.size();
     }
 
-    void addExistingChild(const std::shared_ptr<GNode> &child) {
+    void removeChildImmediately() {
+        children.pop_back();
+        positionInChild.pop_back();
+    }
+
+    void addExistingChild(const std::shared_ptr<GNode> &child, size_t position) {
         children.push_back(child);
+        try {
+            positionInChild.push_back(position);
+        } catch (...) {
+            children.pop_back();
+            throw;
+        }
     }
 
     std::weak_ptr<GNode> addNewChild(const PublId &id) {
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
         children.push_back(child);
+        try {
+            positionInChild.push_back(0);
+        } catch (...) {
+            children.pop_back();
+            throw;
+        }
         return std::weak_ptr(child);
     }
 
@@ -76,13 +100,19 @@ public:
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
         children.push_back(child);
+        try {
+            positionInChild.push_back(0);
+        } catch (...) {
+            children.pop_back();
+            throw;
+        }
 
         int i = 1;
         try {
             for (; i < parents.size(); i++) {
                 size_t position = parents[i]->howManyChildren();
                 child->addParent(parents[i], position);
-                parents[i]->addExistingChild(child);
+                parents[i]->addExistingChild(child, i);
             }
         } catch (...) {
             for (int j = 0; j < i; j++) {
@@ -127,13 +157,25 @@ public:
         return exists;
     }
 
-    void reverseChanges(const std::shared_ptr<GNode> &parent, size_t position) {
+    void reverseChangesInChild(const std::shared_ptr<GNode> &parent) {
         if (!parents.empty()) {
             if (parents[parents.size() - 1].lock().get() == parent.get()) {
                 parents.pop_back();
 
-                if (positionInParent[positionInParent.size() - 1] == position) {
+                if (positionInParent.size() != parents.size()) {
                     positionInParent.pop_back();
+                }
+            }
+        }
+    }
+
+    void reverseChangesInParent(const std::shared_ptr<GNode> &child) {
+        if (!children.empty()) {
+            if (children[children.size() - 1].get() == child.get()) {
+                children.pop_back();
+
+                if (positionInChild.size() != children.size()) {
+                    positionInChild.pop_back();
                 }
             }
         }
@@ -150,6 +192,21 @@ public:
     void removeChild(size_t position) {
         children[position].swap(children[children.size() - 1]);
         children.pop_back();
+        std::swap(positionInChild[position], positionInChild[positionInChild.size() - 1]);
+        positionInChild.pop_back();
+
+        auto child = children[position];
+        child->positionInParent[positionInChild[position]] = position;
+    }
+
+    void removeParent(size_t position) {
+        parents[position].swap(parents[parents.size() - 1]);
+        parents.pop_back();
+        std::swap(positionInParent[position], positionInParent[positionInParent.size() - 1]);
+        positionInParent.pop_back();
+
+        auto parent = parents[position].lock();
+        parent->positionInChild[positionInParent[position]] = position;
     }
 
     void remove() {
@@ -238,7 +295,7 @@ public:
     }
 
     void create(PublId const &id, std::vector<PublId> const &parent_ids) {
-        if (parent_ids.size() <= 0) return;
+        if (parent_ids.size() <= 0) throw PublicationNotFound();
 
         if (exists(id)) throw PublicationAlreadyCreated();
 
@@ -309,15 +366,17 @@ public:
 
         auto childPtr = getPointerToNode(child_id).lock();
         auto parentPtr = getPointerToNode(parent_id).lock();
-        auto position = parentPtr->howManyChildren();
+        auto positionInParent = parentPtr->howManyChildren();
+        auto positionInChild = childPtr->howManyParents();
 
         try {
             if (!childPtr->citationExists(parentPtr)) {
-                childPtr->addParent(parentPtr, position);
-                parentPtr->addExistingChild(childPtr);
+                childPtr->addParent(parentPtr, positionInParent);
+                parentPtr->addExistingChild(childPtr, positionInChild);
             }
         } catch (...) {
-            childPtr->reverseChanges(parentPtr, position);
+            childPtr->reverseChangesInChild(parentPtr);
+            parentPtr->reverseChangesInParent(childPtr);
             throw;
         }
     }
