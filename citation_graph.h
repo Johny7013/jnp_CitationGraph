@@ -8,19 +8,19 @@
 
 class PublicationAlreadyCreated : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication already created";
+        return "PublicationAlreadyCreated";
     }
 };
 
 class PublicationNotFound : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication not found";
+        return "PublicationNotFound";
     }
 };
 
 class TriedToRemoveRoot : public std::exception {
     virtual const char *what() const throw() {
-        return "Tried to remove root";
+        return "TriedToRemoveRoot";
     }
 };
 
@@ -28,15 +28,12 @@ template<class Publication>
 class Node {
     using PublId = typename Publication::id_type;
     using GNode = Node<Publication>;
-    using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
     Publication publication;
     std::weak_ptr<Node<Publication>> thisNode;
     std::vector<std::weak_ptr<GNode>> parents;
     std::vector<size_t> positionInParent;
     std::vector<std::shared_ptr<GNode>> children;
     std::vector<size_t> positionInChild;
-    NodesMap *map;
-    typename NodesMap::iterator mapIt;
 
 public:
     explicit Node(const PublId &id) : publication(id) {}
@@ -53,17 +50,10 @@ public:
         for (size_t i = 0; i < children.size(); i++) {
             children[i]->removeParent(positionInChild[i]);
         }
-
-        map->erase(mapIt);
     }
 
     void setThisNodePointer(const std::shared_ptr<GNode> &ptr) {
         thisNode = ptr;
-    }
-
-    void setMapAndIt(NodesMap *newMap, typename NodesMap::iterator newIt) {
-        map = newMap;
-        mapIt = newIt;
     }
 
     Publication &getPublication() noexcept {
@@ -78,11 +68,15 @@ public:
         return parents.size();
     }
 
+    // only pop_bakcs which have no-throw guarantee as long as
+    // vectors aren't empty
     void removeChildImmediately() {
         children.pop_back();
         positionInChild.pop_back();
     }
 
+    // if childrean push_back fails then we are sure that childrean vector stays
+    // unchanged, pop_back have no-throw guarantee as long as vectors aren't empty
     void addExistingChild(const std::shared_ptr<GNode> &child, size_t position) {
         children.push_back(child);
         try {
@@ -93,6 +87,7 @@ public:
         }
     }
 
+    // similar to above
     std::weak_ptr<GNode> addNewChild(const PublId &id) {
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
@@ -106,6 +101,7 @@ public:
         return std::weak_ptr(child);
     }
 
+    // similar to above
     std::weak_ptr<GNode> addNewChild(const PublId &id, const std::vector<std::shared_ptr<GNode>> &parents) {
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
@@ -134,15 +130,23 @@ public:
         return std::weak_ptr(child);
     }
 
+    // same as addExistingChild
     void addParent(const std::shared_ptr<GNode> &parent, size_t position) {
         parents.push_back(std::weak_ptr(parent));
-        positionInParent.push_back(position);
+        try {
+            positionInParent.push_back(position);
+        } catch (...) {
+            parents.pop_back();
+            throw;
+        }
+
     }
 
     std::vector<size_t> &getPositionsInParents() {
         return positionInParent;
     }
 
+    // just swaps and pop_backs
     bool citationExists(const std::shared_ptr<GNode> &parent) {
         if (parents.empty()) {
             return false;
@@ -167,6 +171,7 @@ public:
         return exists;
     }
 
+    // just pop_backs
     void reverseChangesInChild(const std::shared_ptr<GNode> &parent) {
         if (!parents.empty()) {
             if (parents[parents.size() - 1].lock().get() == parent.get()) {
@@ -179,6 +184,7 @@ public:
         }
     }
 
+    // as above
     void reverseChangesInParent(const std::shared_ptr<GNode> &child) {
         if (!children.empty()) {
             if (children[children.size() - 1].get() == child.get()) {
@@ -199,6 +205,7 @@ public:
         return children;
     }
 
+    // just swaps and pop_backs
     void removeChild(size_t position) {
         children[position].swap(children[children.size() - 1]);
         children.pop_back();
@@ -211,6 +218,7 @@ public:
         }
     }
 
+    // same as above
     void removeParent(size_t position) {
         parents[position].swap(parents[parents.size() - 1]);
         parents.pop_back();
@@ -262,8 +270,7 @@ public:
             : nodes(std::make_unique<NodesMap>()),
               root(std::make_shared<GNode>(stem_id)) {
         root->setThisNodePointer(root);
-        auto newIt = nodes->insert(std::make_pair(stem_id, std::weak_ptr<GNode>(root))).first;
-        root->setMapAndIt(nodes.get(), newIt);
+        (*nodes)[stem_id] = root;
     }
 
     CitationGraph(CitationGraph<Publication> &) = delete;
@@ -306,11 +313,9 @@ public:
 
         auto parentPtr = getPointerToNode(parent_id).lock();
         auto newPtr = parentPtr->addNewChild(id);
-        auto newSharedPtr = newPtr.lock();
 
         try {
-            auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
-            newSharedPtr->setMapAndIt(nodes.get(), newIt);
+            nodes->insert(std::make_pair(id, newPtr));
         } catch (...) {
             parentPtr->removeChildImmediately();
             throw;
@@ -334,11 +339,9 @@ public:
         }
 
         auto newPtr = parents[0]->addNewChild(id, parents);
-        auto newSharedPtr = newPtr.lock();
 
         try {
-            auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
-            newSharedPtr->setMapAndIt(nodes.get(), newIt);
+            nodes->insert(std::make_pair(id, newPtr));
         } catch (...) {
             for (size_t i = 0; i < parents.size(); i++) {
                 parents[i]->removeChildImmediately();
@@ -412,6 +415,7 @@ public:
         auto nodeIt = nodes->find(id);
         std::shared_ptr<GNode> nodePtr = nodeIt->second.lock();
 
+        nodes->erase(nodeIt);
         nodePtr->remove();
     }
 
