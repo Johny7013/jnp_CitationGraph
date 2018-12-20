@@ -10,19 +10,19 @@ class PublicationAlreadyCreated : public std::exception {
     virtual const char *what() const throw() {
         return "Publication already created.";
     }
-} pAlreadyCreated;
+};
 
 class PublicationNotFound : public std::exception {
     virtual const char *what() const throw() {
         return "Publication not found.";
     }
-} pNotFound;
+};
 
 class TriedToRemoveRoot : public std::exception {
     virtual const char *what() const throw() {
         return "Tried to remove root";
     }
-} triedToRemoveRoot;
+};
 
 template<class Publication>
 class Node {
@@ -114,7 +114,7 @@ public:
             if (parents[i - 1].lock().get() == parent.get()) {
                 exists = true;
             }
-            else if (parents[i - 1].expired()) {
+            else if (parents[i - 1].expired()) { // remove expired pointers
                 if (parents.size() != i) {
                     std::swap(parents[i], parents[parents.size()]);
                     std::swap(positionInParent[i], positionInParent[parents.size()]);
@@ -203,25 +203,30 @@ public:
         return root->getPublication().get_id();
     }
 
+    void eraseNodeIfExpired(typename NodesMap::iterator node) const{
+        if (node != nodes->end() && node->second.expired()) {
+            nodes->erase(node);
+        }
+    }
+
     bool exists(PublId const &id) const {
+        eraseNodeIfExpired(nodes->find(id));
+
         return nodes->find(id) != nodes->end();
     }
 
     Publication &operator[](PublId const &id) const {
-        auto node = nodes->find(id);
-        if (node == nodes->end()) {
+        if (!exists(id)) {
             throw PublicationNotFound();
         }
-        return node->second.lock()->getPublication();
+        return getPointerToNode(id).lock()->getPublication();
     }
 
     void create(PublId const &id, PublId const &parent_id) {
-        auto newPtrIt = nodes->find(id);
-        if (newPtrIt != nodes->end()) throw PublicationAlreadyCreated();
-        auto parentPtrIt = nodes->find(parent_id);
-        if (parentPtrIt == nodes->end()) throw PublicationNotFound();
+        if (exists(id)) throw PublicationAlreadyCreated();
+        if (!exists(parent_id)) throw PublicationNotFound();
 
-        auto parentPtr = parentPtrIt->second.lock();
+        auto parentPtr = getPointerToNode(parent_id).lock();
         auto newPtr = parentPtr->addNewChild(id);
 
         try {
@@ -235,15 +240,13 @@ public:
     void create(PublId const &id, std::vector<PublId> const &parent_ids) {
         if (parent_ids.size() <= 0) return;
 
-        auto newPtrIt = nodes->find(id);
-        if (newPtrIt != nodes->end()) throw PublicationAlreadyCreated();
+        if (exists(id)) throw PublicationAlreadyCreated();
 
         std::unordered_set<std::shared_ptr<GNode>> parentsSet;
         std::vector<std::shared_ptr<GNode>> parents;
         for (int i = 0; i < parent_ids.size(); i++) {
-            auto parentPtrIt = nodes->find(parent_ids[i]);
-            if (parentPtrIt == nodes->end()) throw PublicationNotFound();
-            auto parentPtr = parentPtrIt->second.lock();
+            if (!exists(parent_ids[i])) throw PublicationNotFound();
+            auto parentPtr = getPointerToNode(parent_ids[i]).lock();
             if (parentsSet.find(parentPtr) == parentsSet.end()) {
                 parents.push_back(parentPtr);
                 parentsSet.insert(parentPtr);
@@ -264,7 +267,7 @@ public:
 
     std::vector<PublId> get_children(PublId const &id) const {
         if (!exists(id)) {
-            throw pNotFound;
+            throw PublicationNotFound();
         }
 
         std::vector<PublId> children;
@@ -281,7 +284,7 @@ public:
 
     std::vector<PublId> get_parents(PublId const &id) const {
         if (!exists(id)) {
-            throw pNotFound;
+            throw PublicationNotFound();
         }
 
         std::vector<PublId> parents;
@@ -301,7 +304,7 @@ public:
     void add_citation(PublId const &child_id, PublId const &parent_id) {
 
         if (!exists(child_id) || !exists(parent_id)) {
-            throw pNotFound;
+            throw PublicationNotFound();
         }
 
         auto childPtr = getPointerToNode(child_id).lock();
@@ -321,8 +324,9 @@ public:
 
     void remove(PublId const &id) {
         if (id == get_root_id()) throw TriedToRemoveRoot();
+        if (!exists(id)) throw PublicationNotFound();
+
         auto nodeIt = nodes->find(id);
-        if (nodeIt == nodes->end()) throw PublicationNotFound();
         std::shared_ptr<GNode> nodePtr = nodeIt->second.lock();
 
         nodes->erase(nodeIt);
