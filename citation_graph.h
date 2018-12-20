@@ -33,6 +33,7 @@ class Node {
     std::vector<std::weak_ptr<GNode>> parents;
     std::vector<size_t> positionInParent;
     std::vector<std::shared_ptr<GNode>> children;
+    std::vector<size_t> positionInChild;
 
 public:
     explicit Node(const PublId &id) : publication(id) {}
@@ -174,6 +175,18 @@ class CitationGraph {
         return nodes->find(id)->second;
     }
 
+    void eraseNodeIfExpired(typename NodesMap::iterator node) {
+        if (node != nodes->end() && node->second.expired()) {
+            nodes->erase(node);
+        }
+    }
+
+    bool idIsOccupied(PublId const &id) {
+        eraseNodeIfExpired(nodes->find(id));
+
+        return nodes->find(id) != nodes->end();
+    }
+
 public:
     explicit CitationGraph(PublId const &stem_id)
             : nodes(std::make_unique<NodesMap>()),
@@ -203,16 +216,10 @@ public:
         return root->getPublication().get_id();
     }
 
-    void eraseNodeIfExpired(typename NodesMap::iterator node) const{
-        if (node != nodes->end() && node->second.expired()) {
-            nodes->erase(node);
-        }
-    }
-
     bool exists(PublId const &id) const {
-        eraseNodeIfExpired(nodes->find(id));
+        typename NodesMap::iterator node = nodes->find(id);
 
-        return nodes->find(id) != nodes->end();
+        return (node != nodes->end() && !node->second.expired());
     }
 
     Publication &operator[](PublId const &id) const {
@@ -223,8 +230,8 @@ public:
     }
 
     void create(PublId const &id, PublId const &parent_id) {
-        if (exists(id)) throw PublicationAlreadyCreated();
-        if (!exists(parent_id)) throw PublicationNotFound();
+        if (idIsOccupied(id)) throw PublicationAlreadyCreated();
+        if (!idIsOccupied(parent_id)) throw PublicationNotFound();
 
         auto parentPtr = getPointerToNode(parent_id).lock();
         auto newPtr = parentPtr->addNewChild(id);
@@ -240,12 +247,12 @@ public:
     void create(PublId const &id, std::vector<PublId> const &parent_ids) {
         if (parent_ids.size() <= 0) return;
 
-        if (exists(id)) throw PublicationAlreadyCreated();
+        if (idIsOccupied(id)) throw PublicationAlreadyCreated();
 
         std::unordered_set<std::shared_ptr<GNode>> parentsSet;
         std::vector<std::shared_ptr<GNode>> parents;
         for (int i = 0; i < parent_ids.size(); i++) {
-            if (!exists(parent_ids[i])) throw PublicationNotFound();
+            if (!idIsOccupied(parent_ids[i])) throw PublicationNotFound();
             auto parentPtr = getPointerToNode(parent_ids[i]).lock();
             if (parentsSet.find(parentPtr) == parentsSet.end()) {
                 parents.push_back(parentPtr);
@@ -279,7 +286,6 @@ public:
         }
 
         return children;
-
     }
 
     std::vector<PublId> get_parents(PublId const &id) const {
@@ -303,7 +309,7 @@ public:
 
     void add_citation(PublId const &child_id, PublId const &parent_id) {
 
-        if (!exists(child_id) || !exists(parent_id)) {
+        if (!idIsOccupied(child_id) || !idIsOccupied(parent_id)) {
             throw PublicationNotFound();
         }
 
@@ -324,7 +330,7 @@ public:
 
     void remove(PublId const &id) {
         if (id == get_root_id()) throw TriedToRemoveRoot();
-        if (!exists(id)) throw PublicationNotFound();
+        if (!idIsOccupied(id)) throw PublicationNotFound();
 
         auto nodeIt = nodes->find(id);
         std::shared_ptr<GNode> nodePtr = nodeIt->second.lock();
