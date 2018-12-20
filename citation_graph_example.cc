@@ -37,8 +37,8 @@ int main() {
   assert(gen.get_parents("D").size() == parents.size());
   assert(gen.get_children("A").size() == 2);
   assert("D" == gen["D"].get_id());
-//  gen.remove("A");
-//  assert(!gen.exists("A"));
+  gen.remove("A");
+  assert(!gen.exists("A"));
 //  assert(gen.exists("B"));
 //  assert(gen.exists("C"));
 //  assert(gen.exists("D"));

@@ -99,12 +99,30 @@ public:
         positionInParent.push_back(position);
     }
 
+    std::vector<size_t> &getPositionsInParents() {
+        return positionInParent;
+    }
+
     auto &getParents(){
         return parents;
     }
 
     auto &getChildren(){
         return children;
+    }
+
+    void removeChild(size_t position) {
+        children[position].swap(children[children.size() - 1]);
+        children.pop_back();
+    }
+
+    void remove() {
+        for (int i = 0; i < parents.size(); i++) {
+            if (!parents[i].expired()) {
+                auto parentPtr = parents[i].lock();
+                parentPtr->removeChild(positionInParent[i]);
+            }
+        }
     }
 };
 
@@ -114,7 +132,6 @@ class CitationGraph {
     using GNode = Node<Publication>;
     using NodesMap = std::map<PublId, std::weak_ptr<GNode>>;
     std::unique_ptr<NodesMap> nodes;
-    std::unique_ptr<PublId> rootId;
     std::shared_ptr<GNode> root;
 
     std::weak_ptr<GNode> &getPointerToNode(PublId const &id) const {
@@ -124,7 +141,6 @@ class CitationGraph {
 public:
     explicit CitationGraph(PublId const &stem_id)
             : nodes(std::make_unique<NodesMap>()),
-              rootId(std::make_unique<PublId>(stem_id)),
               root(std::make_shared<GNode>(stem_id)) {
         root->setThisNodePointer(root);
         (*nodes)[stem_id] = root;
@@ -133,16 +149,14 @@ public:
     CitationGraph(CitationGraph<Publication> &) = delete;
 
     CitationGraph(CitationGraph<Publication> &&other) noexcept
-            : nodes(nullptr), rootId(nullptr), root(nullptr) {
+            : nodes(nullptr), root(nullptr) {
         nodes.swap(other.nodes);
-        rootId.swap(other.rootId);
         root.swap(other.root);
     }
 
     CitationGraph<Publication> &operator=(CitationGraph<Publication> &&other) noexcept {
         if (this != &other) {
             nodes.swap(other.nodes);
-            rootId.swap(other.rootId);
             root.swap(other.root);
         }
 
@@ -244,6 +258,16 @@ public:
 
             return parents;
         }
+    }
+
+    void remove(PublId const &id) {
+        if (id == get_root_id()) throw TriedToRemoveRoot();
+        auto nodeIt = nodes->find(id);
+        if (nodeIt == nodes->end()) throw PublicationNotFound();
+        std::shared_ptr<GNode> nodePtr = nodeIt->second.lock();
+
+        nodes->erase(nodeIt);
+        nodePtr->remove();
     }
 
 };
