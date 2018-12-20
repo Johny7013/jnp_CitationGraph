@@ -27,9 +27,9 @@ int main() {
   gen.create("B", id1);
   assert(gen.get_children(id1).size() == 2);
   gen.create("C", "A");
-//  gen.add_citation("C", "B");
-//  assert(gen.get_parents("C").size() == 2);
-//  assert(gen.get_children("A").size() == 1);
+  gen.add_citation("C", "B");
+  assert(gen.get_parents("C").size() == 2);
+  assert(gen.get_children("A").size() == 1);
   std::vector<Publication::id_type> parents;
   parents.push_back("A");
   parents.push_back("B");
@@ -39,31 +39,31 @@ int main() {
   assert("D" == gen["D"].get_id());
   gen.remove("A");
   assert(!gen.exists("A"));
-//  assert(gen.exists("B"));
-//  assert(gen.exists("C"));
-//  assert(gen.exists("D"));
-//  gen.remove("B");
-//  assert(!gen.exists("A"));
-//  assert(!gen.exists("B"));
-//  assert(!gen.exists("C"));
-//  assert(!gen.exists("D"));
-//  try {
-//    gen["E"];
-//  }
-//  catch (std::exception &e) {
-//    std::cout << e.what() << std::endl;
-//  }
-//  try {
-//    gen.create("E", "Goto Considered Harmful");
-//    gen.create("E", "Goto Considered Harmful");
-//  }
-//  catch (std::exception &e) {
-//    std::cout << e.what() << std::endl;
-//  }
-//  try {
-//    gen.remove("Goto Considered Harmful");
-//  }
-//  catch (std::exception &e) {
-//    std::cout << e.what() << std::endl;
-//  }
+  assert(gen.exists("B"));
+  assert(gen.exists("C"));
+  assert(gen.exists("D"));
+  gen.remove("B");
+  assert(!gen.exists("A"));
+  assert(!gen.exists("B"));
+  assert(!gen.exists("C"));
+  assert(!gen.exists("D"));
+  try {
+    gen["E"];
+  }
+  catch (std::exception &e) {
+    std::cout << e.what() << std::endl;
+  }
+  try {
+    gen.create("E", "Goto Considered Harmful");
+    gen.create("E", "Goto Considered Harmful");
+  }
+  catch (std::exception &e) {
+    std::cout << e.what() << std::endl;
+  }
+  try {
+    gen.remove("Goto Considered Harmful");
+  }
+  catch (std::exception &e) {
+    std::cout << e.what() << std::endl;
+  }
 }

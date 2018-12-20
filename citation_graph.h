@@ -103,6 +103,42 @@ public:
         return positionInParent;
     }
 
+    bool citationExists(const std::shared_ptr<GNode> &parent) {
+        if (parents.empty()) {
+            return false;
+        }
+
+        bool exists = false;
+
+        for (size_t i = parents.size(); i > 0; i--) {
+            if (parents[i - 1].lock().get() == parent.get()) {
+                exists = true;
+            }
+            else if (parents[i - 1].expired()) {
+                if (parents.size() != i) {
+                    std::swap(parents[i], parents[parents.size()]);
+                    std::swap(positionInParent[i], positionInParent[parents.size()]);
+                }
+                parents.pop_back();
+                positionInParent.pop_back();
+            }
+        }
+
+        return exists;
+    }
+
+    void reverseChanges(const std::shared_ptr<GNode> &parent, size_t position) {
+        if (!parents.empty()) {
+            if (parents[parents.size() - 1].lock().get() == parent.get()) {
+                parents.pop_back();
+
+                if (positionInParent[positionInParent.size() - 1] == position) {
+                    positionInParent.pop_back();
+                }
+            }
+        }
+    }
+
     auto &getParents(){
         return parents;
     }
@@ -230,33 +266,56 @@ public:
         if (!exists(id)) {
             throw pNotFound;
         }
-        else {
-            std::vector<PublId > children;
 
-            auto pointersToChildren = getPointerToNode(id).lock()->getChildren();
+        std::vector<PublId> children;
 
-            for (auto parentNode: pointersToChildren) {
-                children.emplace_back(parentNode->getPublication().get_id());
-            }
+        auto pointersToChildren = getPointerToNode(id).lock()->getChildren();
 
-            return children;
+        for (auto parentNode: pointersToChildren) {
+            children.emplace_back(parentNode->getPublication().get_id());
         }
+
+        return children;
+
     }
 
     std::vector<PublId> get_parents(PublId const &id) const {
         if (!exists(id)) {
             throw pNotFound;
         }
-        else {
-            std::vector<PublId> parents;
 
-            auto pointersToParents = getPointerToNode(id).lock()->getParents();
+        std::vector<PublId> parents;
 
-            for (auto parentNode: pointersToParents) {
+        auto pointersToParents = getPointerToNode(id).lock()->getParents();
+
+        for (auto parentNode: pointersToParents) {
+            if (!parentNode.expired()) {
                 parents.emplace_back(parentNode.lock()->getPublication().get_id());
             }
+        }
 
-            return parents;
+        return parents;
+    }
+
+
+    void add_citation(PublId const &child_id, PublId const &parent_id) {
+
+        if (!exists(child_id) || !exists(parent_id)) {
+            throw pNotFound;
+        }
+
+        auto childPtr = getPointerToNode(child_id).lock();
+        auto parentPtr = getPointerToNode(parent_id).lock();
+        auto position = parentPtr->howManyChildren();
+
+        try {
+            if (!childPtr->citationExists(parentPtr)) {
+                childPtr->addParent(parentPtr, position);
+                parentPtr->addExistingChild(childPtr);
+            }
+        } catch (...) {
+            childPtr->reverseChanges(parentPtr, position);
+            throw;
         }
     }
 
