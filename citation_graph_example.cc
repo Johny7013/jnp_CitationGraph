@@ -20,20 +20,19 @@ private:
 
 int main() {
   CitationGraph<Publication> gen("Goto Considered Harmful");
-//  Publication::id_type const id1 = gen.get_root_id(); // Czy to jest noexcept?
-//  assert(gen.exists(id1));
+  Publication::id_type const id1 = gen.get_root_id(); // Czy to jest noexcept?
 //  assert(gen.get_parents(id1).size() == 0);
-//  gen.create("A", id1);
-//  gen.create("B", id1);
+  gen.create("A", id1);
+  gen.create("B", id1);
 //  assert(gen.get_children(id1).size() == 2);
 //  gen.create("C", "A");
 //  gen.add_citation("C", "B");
 //  assert(gen.get_parents("C").size() == 2);
 //  assert(gen.get_children("A").size() == 1);
-//  std::vector<Publication::id_type> parents;
-//  parents.push_back("A");
-//  parents.push_back("B");
-//  gen.create("D", parents);
+  std::vector<Publication::id_type> parents;
+  parents.push_back("A");
+  parents.push_back("B");
+  gen.create("D", parents);
 //  assert(gen.get_parents("D").size() == parents.size());
 //  assert(gen.get_children("A").size() == 2);
 //  assert("D" == gen["D"].get_id());
