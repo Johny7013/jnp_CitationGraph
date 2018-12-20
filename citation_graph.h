@@ -36,15 +36,16 @@ class Node {
     std::vector<std::shared_ptr<GNode>> children;
     std::vector<size_t> positionInChild;
     NodesMap *map;
-    typename NodesMap::iterator mapIt;
+    std::unique_ptr<typename NodesMap::iterator> mapIt;
 
 public:
-    explicit Node(const PublId &id) : publication(id) {}
+    explicit Node(const PublId &id) : publication(id), mapIt(nullptr) {}
 
     Node(const PublId &id, std::weak_ptr<GNode> parent, size_t index)
             : publication(id),
               parents(),
-              positionInParent() {
+              positionInParent(),
+              mapIt(nullptr) {
         parents.push_back(parent);
         positionInParent.push_back(index);
     }
@@ -54,16 +55,16 @@ public:
             children[i]->removeParent(positionInChild[i]);
         }
 
-        map->erase(mapIt);
+        if (mapIt.get() != nullptr) map->erase(*mapIt);
     }
 
     void setThisNodePointer(const std::shared_ptr<GNode> &ptr) {
         thisNode = ptr;
     }
 
-    void setMapAndIt(NodesMap *newMap, typename NodesMap::iterator newIt) {
+    void setMapAndIt(NodesMap *newMap, std::unique_ptr<typename NodesMap::iterator> newIt) {
         map = newMap;
-        mapIt = newIt;
+        mapIt = std::move(newIt);
     }
 
     Publication &getPublication() noexcept {
@@ -263,7 +264,7 @@ public:
               root(std::make_shared<GNode>(stem_id)) {
         root->setThisNodePointer(root);
         auto newIt = nodes->insert(std::make_pair(stem_id, std::weak_ptr<GNode>(root))).first;
-        root->setMapAndIt(nodes.get(), newIt);
+        root->setMapAndIt(nodes.get(), std::make_unique<typename NodesMap::iterator>(newIt));
     }
 
     CitationGraph(CitationGraph<Publication> &) = delete;
@@ -310,7 +311,7 @@ public:
 
         try {
             auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
-            newSharedPtr->setMapAndIt(nodes.get(), newIt);
+            newSharedPtr->setMapAndIt(nodes.get(), std::make_unique<typename NodesMap::iterator>(newIt));
         } catch (...) {
             parentPtr->removeChildImmediately();
             throw;
@@ -338,7 +339,7 @@ public:
 
         try {
             auto newIt = nodes->insert(std::make_pair(id, newPtr)).first;
-            newSharedPtr->setMapAndIt(nodes.get(), newIt);
+            newSharedPtr->setMapAndIt(nodes.get(), std::make_unique<typename NodesMap::iterator>(newIt));
         } catch (...) {
             for (size_t i = 0; i < parents.size(); i++) {
                 parents[i]->removeChildImmediately();
