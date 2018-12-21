@@ -8,19 +8,19 @@
 
 class PublicationAlreadyCreated : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication already created";
+        return "PublicationAlreadyCreated";
     }
 };
 
 class PublicationNotFound : public std::exception {
     virtual const char *what() const throw() {
-        return "Publication not found";
+        return "PublicationNotFound";
     }
 };
 
 class TriedToRemoveRoot : public std::exception {
     virtual const char *what() const throw() {
-        return "Tried to remove root";
+        return "TriedToRemoveRoot";
     }
 };
 
@@ -79,11 +79,15 @@ public:
         return parents.size();
     }
 
+    // only pop_bakcs which have no-throw guarantee as long as
+    // vectors aren't empty
     void removeChildImmediately() {
         children.pop_back();
         positionInChild.pop_back();
     }
 
+    // if childrean push_back fails then we are sure that childrean vector stays
+    // unchanged, pop_back have no-throw guarantee as long as vectors aren't empty
     void addExistingChild(const std::shared_ptr<GNode> &child, size_t position) {
         children.push_back(child);
         try {
@@ -94,6 +98,7 @@ public:
         }
     }
 
+    // similar to above
     std::weak_ptr<GNode> addNewChild(const PublId &id) {
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
@@ -107,6 +112,7 @@ public:
         return std::weak_ptr(child);
     }
 
+    // similar to above
     std::weak_ptr<GNode> addNewChild(const PublId &id, const std::vector<std::shared_ptr<GNode>> &parents) {
         auto child = std::make_shared<GNode>(id, thisNode, children.size());
         child->setThisNodePointer(child);
@@ -135,15 +141,23 @@ public:
         return std::weak_ptr(child);
     }
 
+    // same as addExistingChild
     void addParent(const std::shared_ptr<GNode> &parent, size_t position) {
         parents.push_back(std::weak_ptr(parent));
-        positionInParent.push_back(position);
+        try {
+            positionInParent.push_back(position);
+        } catch (...) {
+            parents.pop_back();
+            throw;
+        }
+
     }
 
     std::vector<size_t> &getPositionsInParents() {
         return positionInParent;
     }
 
+    // just swaps and pop_backs
     bool citationExists(const std::shared_ptr<GNode> &parent) {
         if (parents.empty()) {
             return false;
@@ -168,6 +182,7 @@ public:
         return exists;
     }
 
+    // just pop_backs
     void reverseChangesInChild(const std::shared_ptr<GNode> &parent) {
         if (!parents.empty()) {
             if (parents[parents.size() - 1].lock().get() == parent.get()) {
@@ -180,6 +195,7 @@ public:
         }
     }
 
+    // as above
     void reverseChangesInParent(const std::shared_ptr<GNode> &child) {
         if (!children.empty()) {
             if (children[children.size() - 1].get() == child.get()) {
@@ -200,6 +216,7 @@ public:
         return children;
     }
 
+    // just swaps and pop_backs
     void removeChild(size_t position) {
         children[position].swap(children[children.size() - 1]);
         children.pop_back();
@@ -212,6 +229,7 @@ public:
         }
     }
 
+    // same as above
     void removeParent(size_t position) {
         parents[position].swap(parents[parents.size() - 1]);
         parents.pop_back();
